@@ -14,7 +14,9 @@ const EllipseCanvas = ({
   onPointerDown,
   onPointerMove,
   onPointerUp,
-  getGradientColor
+  getGradientColor,
+  bottomUpBreatheClass,
+  topDownBreatheClass
 }) => {
   return (
     <div
@@ -58,6 +60,7 @@ const EllipseCanvas = ({
 
         {/* Bottom-Up Ellipse */}
         <ellipse
+          className={bottomUpBreatheClass}
           cx={centerX}
           cy={centerY}
           rx={bottomUpMajor}
@@ -66,13 +69,17 @@ const EllipseCanvas = ({
           stroke={getGradientColor(bottomUpMajor, 'bottomUp')}
           strokeWidth="3"
           filter="url(#glow)"
-          style={{ cursor: isDragging === 'bottomUp' ? 'grabbing' : 'grab' }}
+          style={{ 
+            cursor: isDragging === 'bottomUp' ? 'grabbing' : 'grab',
+            transformOrigin: `${centerX}px ${centerY}px`
+          }}
           onMouseDown={(e) => onPointerDown(e, 'bottomUp')}
           onTouchStart={(e) => onPointerDown(e, 'bottomUp')}
         />
 
         {/* Top-Down Ellipse */}
         <ellipse
+          className={topDownBreatheClass}
           cx={centerX}
           cy={centerY}
           rx={topDownMinor}
@@ -81,7 +88,10 @@ const EllipseCanvas = ({
           stroke={getGradientColor(topDownMajor, 'topDown')}
           strokeWidth="3"
           filter="url(#glow)"
-          style={{ cursor: isDragging === 'topDown' ? 'grabbing' : 'grab' }}
+          style={{ 
+            cursor: isDragging === 'topDown' ? 'grabbing' : 'grab',
+            transformOrigin: `${centerX}px ${centerY}px`
+          }}
           onMouseDown={(e) => onPointerDown(e, 'topDown')}
           onTouchStart={(e) => onPointerDown(e, 'topDown')}
         />

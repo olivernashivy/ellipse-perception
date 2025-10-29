@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, RotateCcw, Database, HelpCircle, Share2, Tag, BookOpen, Users, X, Brain, Smile, Frown, Target, Zap, Heart, Eye } from 'lucide-react';
+import { Save, RotateCcw, Database, HelpCircle, Share2, Tag, BookOpen, Users, X, Brain, Smile, Frown, Target, Zap, Heart, Eye, BarChart3, Lightbulb, Triangle, AlertTriangle, CheckCircle } from 'lucide-react';
 import Tutorial from './components/Tutorial';
 import SaveDialog from './components/SaveDialog';
 import EllipseCanvas from './components/EllipseCanvas';
@@ -24,6 +24,10 @@ const EllipsePerceptionApp = () => {
   const [currentNotes, setCurrentNotes] = useState('');
   const [tutorialStep, setTutorialStep] = useState(0);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [hoveredEllipse, setHoveredEllipse] = useState(null);
+  const [showAppendix, setShowAppendix] = useState(false);
+  const [isMultiTouch, setIsMultiTouch] = useState(false);
+  const [lastHapticTime, setLastHapticTime] = useState(0);
   
   // Canvas references
   const svgRef = useRef(null);
@@ -134,30 +138,67 @@ const EllipsePerceptionApp = () => {
   // Emotional state interpretation helpers
   const getTopDownInterpretation = () => {
     const ratio = topDownMajor / topDownMinor;
+    const width = topDownMinor;
+    
+    // Vertical stretch = being suppressed/overwhelmed, taking on too much
     if (topDownMajor > 280 && ratio > 2.5) {
-      return "Overwhelmed - Taking on too much responsibility";
+      return "Unterdrückt - Overly responsible, emotionally stretched thin";
     } else if (topDownMajor > 220 && ratio > 2) {
-      return "Stretched thin - High mental burden";
+      return "Overwhelmed - Carrying too much mental burden";
+    } else if (width < 80 && ratio > 1.8) {
+      return "Compressed - Loss of mental flexibility and clarity";
     } else if (topDownMajor < 120) {
-      return "Relaxed control - Low pressure";
-    } else if (ratio < 1.5) {
-      return "Flexible mindset - Adaptive thinking";
+      return "Relaxed - Low mental pressure, breathing room";
+    } else if (ratio < 1.5 && width > 120) {
+      return "Flexible - Adaptive thinking, clear awareness";
     }
-    return "Balanced mental state";
+    return "Balanced - Healthy responsibility level";
   };
 
   const getBottomUpInterpretation = () => {
     const ratio = bottomUpMajor / bottomUpMinor;
+    const height = bottomUpMinor;
+    
+    // Horizontal stretch = external pressure from environment
     if (bottomUpMajor > 280 && ratio > 2.5) {
-      return "Loss of self - External pressure overwhelming";
+      return "External overwhelm - Others taking too much space";
     } else if (bottomUpMajor > 220 && ratio > 2) {
-      return "Scattered attention - Too much input";
-    } else if (bottomUpMinor > 180) {
-      return "Grounded - Strong sense of self";
-    } else if (bottomUpMinor < 80) {
-      return "Hyper-focused - Narrow perception";
+      return "Scattered - Too much external input and pressure";
+    } else if (height < 80) {
+      return "Compressed self - Loss of self-awareness and grounding";
+    } else if (height > 180 && ratio < 1.5) {
+      return "Grounded - Strong sense of self, centered";
+    } else if (bottomUpMinor > bottomUpMajor) {
+      return "Focused inward - Clear self-awareness";
     }
-    return "Balanced awareness";
+    return "Balanced - Healthy boundary with environment";
+  };
+
+  // Get breathing animation class based on emotional intensity
+  const getBottomUpBreatheClass = () => {
+    if (isDragging === 'bottomUp') return ''; // No animation while dragging
+    const ratio = bottomUpMajor / bottomUpMinor;
+    if (bottomUpMajor > 280 && ratio > 2.5) {
+      return 'ellipse-breathe-overwhelmed'; // Fast, irregular breathing
+    } else if (bottomUpMajor > 220 && ratio > 2) {
+      return 'ellipse-breathe-intense'; // Quick breathing
+    } else if (bottomUpMinor > 180 || ratio < 1.5) {
+      return 'ellipse-breathe-calm'; // Slow, deep breathing
+    }
+    return 'ellipse-breathe-neutral'; // Normal breathing
+  };
+
+  const getTopDownBreatheClass = () => {
+    if (isDragging === 'topDown') return ''; // No animation while dragging
+    const ratio = topDownMajor / topDownMinor;
+    if (topDownMajor > 280 && ratio > 2.5) {
+      return 'ellipse-breathe-overwhelmed'; // Fast, irregular breathing
+    } else if (topDownMajor > 220 && ratio > 2) {
+      return 'ellipse-breathe-intense'; // Quick breathing
+    } else if (topDownMajor < 120 || ratio < 1.5) {
+      return 'ellipse-breathe-calm'; // Slow, deep breathing
+    }
+    return 'ellipse-breathe-neutral'; // Normal breathing
   };
 
   // Handlers
@@ -170,42 +211,133 @@ const EllipsePerceptionApp = () => {
     if (!isDragging || !svgRef.current) return;
     
     const rect = svgRef.current.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
     
-    const dx = Math.abs(x - centerX);
-    const dy = Math.abs(y - centerY);
+    // Support multi-touch for independent axis control
+    let touches = [];
+    if (e.touches && e.touches.length > 0) {
+      // Multi-touch: map all touch points
+      touches = Array.from(e.touches).map(touch => ({
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top
+      }));
+      setIsMultiTouch(touches.length > 1);
+    } else {
+      // Single touch or mouse
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+      touches = [{
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      }];
+      setIsMultiTouch(false);
+    }
+
+    // Calculate distances from center for each touch point
+    const distances = touches.map(touch => ({
+      dx: Math.abs(touch.x - centerX),
+      dy: Math.abs(touch.y - centerY),
+      rawX: touch.x - centerX,
+      rawY: touch.y - centerY
+    }));
 
     if (isDragging === 'bottomUp') {
       // Bottom-Up: Horizontal ellipse - independent control
-      // Major axis (horizontal) = movement/overview - stretching sideways shows loss of self, external pressure
-      // Minor axis (vertical) = focus - how thin/wide the perception band is
-      const newMajor = Math.max(50, Math.min(350, dx));
-      const newMinor = Math.max(50, Math.min(250, dy));
-      setBottomUpMajor(newMajor);
-      setBottomUpMinor(newMinor);
+      if (touches.length > 1) {
+        // Multi-touch: independently control horizontal and vertical
+        // Find horizontal and vertical extremes
+        const maxDx = Math.max(...distances.map(d => d.dx));
+        const maxDy = Math.max(...distances.map(d => d.dy));
+        
+        const newMajor = Math.max(50, Math.min(350, maxDx));
+        const newMinor = Math.max(50, Math.min(250, maxDy));
+        
+        setBottomUpMajor(newMajor);
+        setBottomUpMinor(newMinor);
+      } else {
+        // Single touch: traditional diagonal drag
+        const dx = distances[0].dx;
+        const dy = distances[0].dy;
+        
+        // Detect primary drag direction for more precise control
+        const angle = Math.atan2(distances[0].rawY, distances[0].rawX);
+        const isHorizontalDrag = Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle));
+        
+        if (isHorizontalDrag) {
+          // Primarily horizontal drag - adjust major axis more
+          const newMajor = Math.max(50, Math.min(350, dx));
+          setBottomUpMajor(newMajor);
+          // Minor axis follows with dampening
+          const newMinor = Math.max(50, Math.min(250, dy * 0.3 + bottomUpMinor * 0.7));
+          setBottomUpMinor(newMinor);
+        } else {
+          // Primarily vertical drag - adjust minor axis more
+          const newMinor = Math.max(50, Math.min(250, dy));
+          setBottomUpMinor(newMinor);
+          // Major axis follows with dampening
+          const newMajor = Math.max(50, Math.min(350, dx * 0.3 + bottomUpMajor * 0.7));
+          setBottomUpMajor(newMajor);
+        }
+      }
       
-      // Provide visual feedback for emotional state
-      triggerHaptic();
+      // Trigger stress-based haptic feedback (debounced)
+      const now = Date.now();
+      if (now - lastHapticTime > 200) { // Debounce: max once per 200ms
+        const stressLevel = checkEmotionalStress();
+        triggerHaptic(stressLevel);
+        setLastHapticTime(now);
+      }
       
     } else if (isDragging === 'topDown') {
       // Top-Down: Vertical ellipse - independent control
-      // Major axis (vertical) = burden/responsibility - stretching up shows being overwhelmed, taking on too much
-      // Minor axis (horizontal) = flexibility - how rigid/flexible the mental state is
-      const newMajor = Math.max(50, Math.min(350, dy));
-      const newMinor = Math.max(50, Math.min(250, dx));
-      setTopDownMajor(newMajor);
-      setTopDownMinor(newMinor);
+      if (touches.length > 1) {
+        // Multi-touch: independently control vertical and horizontal
+        const maxDx = Math.max(...distances.map(d => d.dx));
+        const maxDy = Math.max(...distances.map(d => d.dy));
+        
+        const newMajor = Math.max(50, Math.min(350, maxDy));
+        const newMinor = Math.max(50, Math.min(250, maxDx));
+        
+        setTopDownMajor(newMajor);
+        setTopDownMinor(newMinor);
+      } else {
+        // Single touch: traditional diagonal drag
+        const dx = distances[0].dx;
+        const dy = distances[0].dy;
+        
+        // Detect primary drag direction for more precise control
+        const angle = Math.atan2(distances[0].rawY, distances[0].rawX);
+        const isVerticalDrag = Math.abs(Math.sin(angle)) > Math.abs(Math.cos(angle));
+        
+        if (isVerticalDrag) {
+          // Primarily vertical drag - adjust major axis more
+          const newMajor = Math.max(50, Math.min(350, dy));
+          setTopDownMajor(newMajor);
+          // Minor axis follows with dampening
+          const newMinor = Math.max(50, Math.min(250, dx * 0.3 + topDownMinor * 0.7));
+          setTopDownMinor(newMinor);
+        } else {
+          // Primarily horizontal drag - adjust minor axis more
+          const newMinor = Math.max(50, Math.min(250, dx));
+          setTopDownMinor(newMinor);
+          // Major axis follows with dampening
+          const newMajor = Math.max(50, Math.min(350, dy * 0.3 + topDownMajor * 0.7));
+          setTopDownMajor(newMajor);
+        }
+      }
       
-      // Provide visual feedback for emotional state
-      triggerHaptic();
+      // Trigger stress-based haptic feedback (debounced)
+      const now = Date.now();
+      if (now - lastHapticTime > 200) { // Debounce: max once per 200ms
+        const stressLevel = checkEmotionalStress();
+        triggerHaptic(stressLevel);
+        setLastHapticTime(now);
+      }
     }
   };
 
   const handlePointerUp = () => {
     setIsDragging(null);
+    setIsMultiTouch(false);
   };
 
   // Configuration management
@@ -292,11 +424,45 @@ Explore your own perception at: ${window.location.href}`;
     localStorage.setItem('hasSeenTutorial', 'true');
   };
 
-  // Add haptic feedback for mobile
-  const triggerHaptic = () => {
-    if (navigator.vibrate) {
-      navigator.vibrate(10); // 10ms vibration
+  // Add haptic feedback for mobile with stress-based intensity
+  const triggerHaptic = (stressLevel = 'normal') => {
+    if (!navigator.vibrate) return;
+    
+    // Different vibration patterns based on emotional stress
+    const patterns = {
+      normal: 10,                    // Subtle feedback for regular interactions
+      moderate: [20, 10, 20],        // Double pulse for moderate stress
+      high: [30, 10, 30, 10, 30],    // Triple pulse for high stress
+      extreme: [50, 30, 50, 30, 50]  // Intense pattern for extreme distortion
+    };
+    
+    navigator.vibrate(patterns[stressLevel] || patterns.normal);
+  };
+
+  // Check for extreme distortion and trigger appropriate haptic feedback
+  const checkEmotionalStress = () => {
+    const bottomUpRatio = bottomUpMajor / bottomUpMinor;
+    const topDownRatio = topDownMajor / topDownMinor;
+    
+    // Extreme distortion: both ratios very high or values at extremes
+    if ((bottomUpRatio > 3.5 || topDownRatio > 3.5) || 
+        (bottomUpMajor > 330 || topDownMajor > 330)) {
+      return 'extreme';
     }
+    
+    // High stress: significant imbalance
+    if ((bottomUpRatio > 2.5 || topDownRatio > 2.5) ||
+        (bottomUpMajor > 280 || topDownMajor > 280)) {
+      return 'high';
+    }
+    
+    // Moderate stress: noticeable imbalance
+    if ((bottomUpRatio > 2.0 || topDownRatio > 2.0) ||
+        (bottomUpMajor > 230 || topDownMajor > 230)) {
+      return 'moderate';
+    }
+    
+    return 'normal';
   };
 
   const handleButtonClick = (callback) => {
@@ -411,22 +577,74 @@ Explore your own perception at: ${window.location.href}`;
           </div>
         )}
 
-        <EllipseCanvas
-          canvasWidth={canvasWidth}
-          canvasHeight={canvasHeight}
-          centerX={centerX}
-          centerY={centerY}
-          bottomUpMajor={bottomUpMajor}
-          bottomUpMinor={bottomUpMinor}
-          topDownMajor={topDownMajor}
-          topDownMinor={topDownMinor}
-          isDragging={isDragging}
-          svgRef={svgRef}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          getGradientColor={getGradientColor}
-        />
+        {/* Canvas with hover info cards */}
+        <div className="relative mb-6">
+          <EllipseCanvas
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
+            centerX={centerX}
+            centerY={centerY}
+            bottomUpMajor={bottomUpMajor}
+            bottomUpMinor={bottomUpMinor}
+            topDownMajor={topDownMajor}
+            topDownMinor={topDownMinor}
+            isDragging={isDragging}
+            svgRef={svgRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            getGradientColor={getGradientColor}
+            bottomUpBreatheClass={getBottomUpBreatheClass()}
+            topDownBreatheClass={getTopDownBreatheClass()}
+          />
+          
+          {/* Multi-touch indicator */}
+          {isMultiTouch && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-purple-500/80 backdrop-blur-sm border border-purple-400/60 rounded-full px-4 py-2 shadow-2xl animate-pulse z-20">
+              <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                <div className="flex gap-1">
+                  <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
+                  <div className="w-2 h-2 rounded-full bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                </div>
+                Multi-Touch Active
+              </div>
+            </div>
+          )}
+
+          {/* Instruction hint for multi-touch */}
+          {isDragging && !isMultiTouch && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-indigo-500/70 backdrop-blur-sm border border-indigo-400/50 rounded-xl px-3 py-2 shadow-lg z-20">
+              <div className="text-xs text-white/90 text-center">
+                💡 Use two fingers for independent axis control
+              </div>
+            </div>
+          )}
+
+          {/* Extreme stress warning indicator */}
+          {(() => {
+            const stressLevel = checkEmotionalStress();
+            if (stressLevel === 'extreme') {
+              return (
+                <div className="absolute top-4 right-4 bg-red-500/90 backdrop-blur-sm border border-red-400/80 rounded-xl px-3 py-2 shadow-2xl animate-pulse z-20">
+                  <div className="flex items-center gap-2 text-sm font-bold text-white">
+                    <span className="text-lg">⚠️</span>
+                    Extreme Distortion
+                  </div>
+                </div>
+              );
+            } else if (stressLevel === 'high') {
+              return (
+                <div className="absolute top-4 right-4 bg-orange-500/80 backdrop-blur-sm border border-orange-400/60 rounded-xl px-3 py-2 shadow-lg z-20">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-white">
+                    <span>⚡</span>
+                    High Stress
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+        </div>
 
         {/* Balance slider with hover instructions */}
         <div 
@@ -438,10 +656,10 @@ Explore your own perception at: ${window.location.href}`;
           {showInstructions && (
             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 bg-blue-500/20 backdrop-blur-md border border-blue-500/50 rounded-xl p-3 shadow-2xl animate-slideUp max-w-md">
               <div className="text-xs text-blue-200 space-y-1">
-                <div className="font-semibold mb-1 text-white">💡 How to express your feeling:</div>
-                <div>🟡 <span className="text-yellow-300 font-medium">Horizontal (Yellow)</span>: Stretch sideways when you feel external pressure, loss of self, or scattered</div>
-                <div>🟢 <span className="text-green-300 font-medium">Vertical (Green)</span>: Stretch upward when overwhelmed, taking on too much responsibility</div>
-                <div className="text-white/70 text-[10px] mt-2 pt-2 border-t border-white/20">Drag each ellipse independently to map your unique emotional state</div>
+                <div className="font-semibold mb-1 text-white">💡 How to express your emotional state:</div>
+                <div>🟡 <span className="text-yellow-300 font-medium">Bottom-Up (Yellow)</span>: React to external environment - stretch when others take too much space, compress when losing self-awareness</div>
+                <div>🟢 <span className="text-green-300 font-medium">Top-Down (Green)</span>: Express internal burden - stretch upward when "unterdrückt" (suppressed/overwhelmed), narrow when losing mental flexibility</div>
+                <div className="text-white/70 text-[10px] mt-2 pt-2 border-t border-white/20">Use multi-touch gestures to precisely adjust each ellipse independently and align with your feelings</div>
               </div>
             </div>
           )}
@@ -454,33 +672,146 @@ Explore your own perception at: ${window.location.href}`;
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-xl p-4 border border-yellow-500/30">
+        <div className="grid grid-cols-2 gap-4 mb-6 relative">
+          {/* Bottom-Up metric card with hover */}
+          <div 
+            className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-xl p-4 border border-yellow-500/30 cursor-help transition-all hover:border-yellow-400/50 hover:shadow-xl hover:shadow-yellow-500/20"
+            onMouseEnter={() => setHoveredEllipse('bottomUp')}
+            onMouseLeave={() => setHoveredEllipse(null)}
+          >
             <div className="text-yellow-400 font-semibold mb-2 flex items-center gap-2">
               <div className="w-4 h-4 rounded-full" style={{ background: getGradientColor(bottomUpMajor, 'bottomUp') }} />
               Bottom-Up
             </div>
             <div className="text-sm space-y-1">
               <div>Eccentricity: <span className="font-bold">{eccBU.toFixed(3)}</span></div>
-              <div className="text-xs text-white/50 mb-2">Sensory awareness</div>
+              <div className="text-xs text-white/50 mb-2">External environment pressure</div>
               <div className="text-xs text-yellow-300 mt-2 italic">
                 {getBottomUpInterpretation()}
               </div>
             </div>
           </div>
-          <div className="bg-gradient-to-br from-green-500/20 to-cyan-500/20 rounded-xl p-4 border border-green-500/30">
+
+          {/* Top-Down metric card with hover */}
+          <div 
+            className="bg-gradient-to-br from-green-500/20 to-cyan-500/20 rounded-xl p-4 border border-green-500/30 cursor-help transition-all hover:border-green-400/50 hover:shadow-xl hover:shadow-green-500/20"
+            onMouseEnter={() => setHoveredEllipse('topDown')}
+            onMouseLeave={() => setHoveredEllipse(null)}
+          >
             <div className="text-green-400 font-semibold mb-2 flex items-center gap-2">
               <div className="w-4 h-4 rounded-full" style={{ background: getGradientColor(topDownMajor, 'topDown') }} />
               Top-Down
             </div>
             <div className="text-sm space-y-1">
               <div>Eccentricity: <span className="font-bold">{eccTD.toFixed(3)}</span></div>
-              <div className="text-xs text-white/50 mb-2">Mental burden</div>
+              <div className="text-xs text-white/50 mb-2">Internal responsibility burden</div>
               <div className="text-xs text-green-300 mt-2 italic">
                 {getTopDownInterpretation()}
               </div>
             </div>
           </div>
+
+                    {/* Bottom-Up Info Card */}
+          {hoveredEllipse === 'bottomUp' && (
+            <div className="absolute left-0 top-full mt-2 max-w-xs bg-gradient-to-br from-yellow-500/30 to-orange-500/30 backdrop-blur-md border border-yellow-500/60 rounded-2xl p-4 shadow-2xl animate-slideIn z-20">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-3 h-3 rounded-full bg-yellow-400 animate-pulse"></div>
+                <h4 className="font-bold text-yellow-300">Bottom-Up: External Environment</h4>
+              </div>
+              <div className="text-xs text-white/90 space-y-2">
+                <div>
+                  <span className="font-semibold text-yellow-200">What it represents:</span>
+                  <div className="text-white/80 mt-1">Your relationship with the surrounding environment - how external pressures affect your sense of self</div>
+                </div>
+                <div className="border-t border-white/20 pt-2 space-y-1">
+                  <div className="text-white/70">
+                    <span className="font-medium">→ Horizontal (Width):</span> {bottomUpMajor.toFixed(0)}px
+                  </div>
+                  <div className="text-white/60 text-[10px] ml-3">
+                    When others take too much responsibility or space in your environment
+                  </div>
+                  <div className="text-white/70 mt-1">
+                    <span className="font-medium">↕ Vertical (Height):</span> {bottomUpMinor.toFixed(0)}px
+                  </div>
+                  <div className="text-white/60 text-[10px] ml-3">
+                    Your sense of self, grounding, and self-awareness
+                  </div>
+                  <div className="text-white/70 mt-1">
+                    <span className="font-medium">Ratio:</span> {(bottomUpMajor / bottomUpMinor).toFixed(2)} {(bottomUpMajor / bottomUpMinor) > 1.8 ? '⚠️ Compressed self' : bottomUpMinor > bottomUpMajor ? '✓ Grounded' : '○ Balanced'}
+                  </div>
+                </div>
+                <div className="text-[10px] text-yellow-200/70 italic bg-yellow-500/10 p-2 rounded">
+                  💡 <strong>Use multi-touch:</strong> Stretch horizontally when external pressure increases. Your vertical axis (self-awareness) may compress when overwhelmed by surroundings.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Top-Down Info Card */}
+          {hoveredEllipse === 'topDown' && (
+            <div className="absolute right-0 top-full mt-2 max-w-xs bg-gradient-to-br from-green-500/30 to-cyan-500/30 backdrop-blur-md border border-green-500/60 rounded-2xl p-4 shadow-2xl animate-slideIn z-20">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
+                <h4 className="font-bold text-green-300">Top-Down: Internal Responsibility</h4>
+              </div>
+              <div className="text-xs text-white/90 space-y-2">
+                <div>
+                  <span className="font-semibold text-green-200">What it represents:</span>
+                  <div className="text-white/80 mt-1">Being "unterdrückt" (suppressed/overwhelmed) - how responsibility weighs on you internally</div>
+                </div>
+                <div className="border-t border-white/20 pt-2 space-y-1">
+                  <div className="text-white/70">
+                    <span className="font-medium">↕ Vertical (Height):</span> {topDownMajor.toFixed(0)}px
+                  </div>
+                  <div className="text-white/60 text-[10px] ml-3">
+                    Mental burden and responsibility - being stretched thin emotionally
+                  </div>
+                  <div className="text-white/70 mt-1">
+                    <span className="font-medium">→ Horizontal (Width):</span> {topDownMinor.toFixed(0)}px
+                  </div>
+                  <div className="text-white/60 text-[10px] ml-3">
+                    Mental flexibility, clarity, and adaptive thinking
+                  </div>
+                  <div className="text-white/70 mt-1">
+                    <span className="font-medium">Ratio:</span> {(topDownMajor / topDownMinor).toFixed(2)} {(topDownMajor / topDownMinor) > 2 ? '⚠️ Stretched thin' : topDownMinor > 120 ? '✓ Flexible' : '○ Balanced'}
+                  </div>
+                </div>
+                <div className="text-[10px] text-green-200/70 italic bg-green-500/10 p-2 rounded">
+                  💡 <strong>Use multi-touch:</strong> Stretch vertically when feeling overly responsible. Compression horizontally signals loss of mental flexibility and clarity.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Top-Down Info Card */}
+          {hoveredEllipse === 'topDown' && (
+            <div className="absolute right-0 top-full mt-2 max-w-xs bg-gradient-to-br from-green-500/30 to-cyan-500/30 backdrop-blur-md border border-green-500/60 rounded-2xl p-4 shadow-2xl animate-slideIn z-20">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
+                <h4 className="font-bold text-green-300">Top-Down Processing Details</h4>
+              </div>
+              <div className="text-xs text-white/90 space-y-2">
+                <div>
+                  <span className="font-semibold text-green-200">What it represents:</span>
+                  <div className="text-white/80 mt-1">Mental burden and cognitive load - how much responsibility you're carrying</div>
+                </div>
+                <div className="border-t border-white/20 pt-2">
+                  <div className="text-white/70">
+                    <span className="font-medium">Height:</span> {topDownMajor.toFixed(0)}px - Mental burden/responsibility
+                  </div>
+                  <div className="text-white/70">
+                    <span className="font-medium">Width:</span> {topDownMinor.toFixed(0)}px - Mental flexibility
+                  </div>
+                  <div className="text-white/70 mt-1">
+                    <span className="font-medium">Ratio:</span> {(topDownMajor / topDownMinor).toFixed(2)} {(topDownMajor / topDownMinor) > 1.5 ? '(High mental burden)' : '(Balanced)'}
+                  </div>
+                </div>
+                <div className="text-[10px] text-green-200/70 italic bg-green-500/10 p-2 rounded">
+                  💡 Drag the green ellipse upward when feeling overwhelmed or taking on too much responsibility
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl p-4 mb-6 border border-purple-500/30">
@@ -490,6 +821,250 @@ Explore your own perception at: ${window.location.href}`;
               {balance.toFixed(2)}
             </span>
           </div>
+        </div>
+
+        {/* Mathematical Appendix Section */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowAppendix(!showAppendix)}
+            className="w-full bg-gradient-to-r from-indigo-600/30 to-purple-600/30 hover:from-indigo-600/50 hover:to-purple-600/50 border border-indigo-500/30 rounded-xl px-4 py-3 text-sm font-medium transition flex items-center justify-between gap-2 haptic-feedback"
+          >
+            <div className="flex items-center gap-2">
+              <BookOpen size={18} className="text-indigo-400" />
+              <span className="text-white">Mathematical Foundation & Insights</span>
+            </div>
+            <span className="text-indigo-300 text-xs">
+              {showAppendix ? '▲ Hide' : '▼ Show'}
+            </span>
+          </button>
+
+          {showAppendix && (
+            <div className="mt-3 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 backdrop-blur-sm border border-indigo-500/30 rounded-xl p-4 space-y-4 animate-slideUp">
+              {/* Mathematical Definition */}
+              <div>
+                <h3 className="text-sm font-bold text-indigo-300 mb-2 flex items-center gap-2">
+                  <Triangle size={16} className="text-indigo-400" />
+                  Ellipse Mathematics
+                </h3>
+                <div className="text-xs text-white/80 space-y-2">
+                  <div className="bg-black/30 p-3 rounded-lg text-center">
+                    <div className="text-indigo-200 font-mono text-sm">
+                      x² / a² + y² / b² = 1
+                    </div>
+                  </div>
+                  <div className="text-white/70">
+                    <span className="font-semibold text-white">Where:</span>
+                    <div className="ml-3 mt-1 space-y-1">
+                      <div><span className="text-yellow-300">a</span> (horizontal axis) = External environment pressure / Freedom of movement</div>
+                      <div><span className="text-green-300">b</span> (vertical axis) = Internal responsibility stress / Sense of self</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Personalized Feedback */}
+              <div className="border-t border-white/10 pt-3">
+                <h3 className="text-sm font-bold text-indigo-300 mb-2 flex items-center gap-2">
+                  <Lightbulb size={16} className="text-indigo-400" />
+                  Personalized Insights
+                </h3>
+                <div className="space-y-2 text-xs text-white/80">
+                  {/* Bottom-Up Analysis - Always show something */}
+                  {(() => {
+                    const buRatio = bottomUpMajor / bottomUpMinor;
+                    
+                    if (buRatio > 2.5) {
+                      return (
+                        <div className="bg-yellow-500/20 border border-yellow-500/40 rounded-lg p-3">
+                          <div className="font-semibold text-yellow-300 mb-1 flex items-center gap-1">
+                            <AlertTriangle size={14} />
+                            High External Pressure Detected
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            Your horizontal stretch indicates external overwhelm. Consider:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>Setting boundaries with people taking too much space</li>
+                              <li>Grounding exercises to restore sense of self</li>
+                              <li>Mindful breathing: 4-7-8 technique</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    } else if (buRatio > 1.8) {
+                      return (
+                        <div className="bg-yellow-500/15 border border-yellow-500/30 rounded-lg p-3">
+                          <div className="font-semibold text-yellow-300 mb-1 flex items-center gap-1">
+                            <Eye size={14} />
+                            Moderate External Influence
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            You're experiencing some external pressure. Tips:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>Notice when others' needs overshadow your own</li>
+                              <li>Practice saying "no" to maintain your energy</li>
+                              <li>Short grounding breaks throughout the day</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    } else if (bottomUpMinor > bottomUpMajor * 0.9) {
+                      return (
+                        <div className="bg-yellow-400/20 border border-yellow-400/40 rounded-lg p-3">
+                          <div className="font-semibold text-yellow-200 mb-1 flex items-center gap-1">
+                            <CheckCircle size={14} />
+                            Strong Self-Awareness
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            You're well-grounded in yourself. Keep it up:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>Your sense of self is solid and centered</li>
+                              <li>Continue your self-care practices</li>
+                              <li>You're managing external pressures well</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="bg-yellow-500/10 border border-yellow-500/25 rounded-lg p-3">
+                          <div className="font-semibold text-yellow-300 mb-1 flex items-center gap-1">
+                            <Target size={14} />
+                            Stable External Processing
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            Your relationship with external environment is balanced:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>Good boundaries with external demands</li>
+                              <li>Maintain awareness of your personal space</li>
+                              <li>Notice early signs of external pressure</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    }
+                  })()}
+
+                  {/* Top-Down Analysis - Always show something */}
+                  {(() => {
+                    const tdRatio = topDownMajor / topDownMinor;
+                    
+                    if (tdRatio > 2.5) {
+                      return (
+                        <div className="bg-green-500/20 border border-green-500/40 rounded-lg p-3">
+                          <div className="font-semibold text-green-300 mb-1 flex items-center gap-1">
+                            <AlertTriangle size={14} />
+                            "Unterdrückt" - Overwhelmed by Responsibility
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            You're emotionally stretched thin. Try:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>Delegate tasks - you don't have to carry everything</li>
+                              <li>Progressive muscle relaxation</li>
+                              <li>Take 5-minute breaks every hour</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    } else if (tdRatio > 1.8) {
+                      return (
+                        <div className="bg-green-500/15 border border-green-500/30 rounded-lg p-3">
+                          <div className="font-semibold text-green-300 mb-1 flex items-center gap-1">
+                            <Zap size={14} />
+                            Elevated Mental Burden
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            You're carrying notable responsibility. Remember:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>It's okay to ask for help</li>
+                              <li>Prioritize tasks - not everything is urgent</li>
+                              <li>Take micro-breaks to reset mental clarity</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    } else if (topDownMajor < 150) {
+                      return (
+                        <div className="bg-green-400/20 border border-green-400/40 rounded-lg p-3">
+                          <div className="font-semibold text-green-200 mb-1 flex items-center gap-1">
+                            <Heart size={14} />
+                            Relaxed Mental State
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            Low mental pressure - excellent for creativity:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>Great time for creative thinking</li>
+                              <li>Enjoy this breathing room</li>
+                              <li>Consider tackling challenging tasks now</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="bg-green-500/10 border border-green-500/25 rounded-lg p-3">
+                          <div className="font-semibold text-green-300 mb-1 flex items-center gap-1">
+                            <CheckCircle size={14} />
+                            Healthy Responsibility Level
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            Your mental burden is well-managed:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>Good balance between work and rest</li>
+                              <li>Maintain flexible thinking patterns</li>
+                              <li>Monitor stress levels proactively</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    }
+                  })()}
+
+                  {/* Overall Balance Assessment */}
+                  {(() => {
+                    if (balance > 2.5 || balance < 0.4) {
+                      return (
+                        <div className="bg-red-500/20 border border-red-500/40 rounded-lg p-3">
+                          <div className="font-semibold text-red-300 mb-1 flex items-center gap-1">
+                            <AlertTriangle size={14} />
+                            Significant Imbalance Detected
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            Your perception systems are out of sync. Priority actions:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>Consider professional support or counseling</li>
+                              <li>Reach out to trusted friends or family</li>
+                              <li>Use the breathing exercise feature below</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    } else if (Math.abs(1 - balance) < 0.3) {
+                      return (
+                        <div className="bg-blue-500/20 border border-blue-500/40 rounded-lg p-3">
+                          <div className="font-semibold text-blue-300 mb-1 flex items-center gap-1">
+                            <CheckCircle size={14} />
+                            Excellent Overall Balance
+                          </div>
+                          <div className="text-white/70 text-[11px]">
+                            Both systems working in harmony:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                              <li>External and internal processing aligned</li>
+                              <li>Continue your current wellness practices</li>
+                              <li>Save this state for future reference</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </div>
+
+            
+            
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">

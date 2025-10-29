@@ -53,6 +53,17 @@
   }
 }
 
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
 @keyframes breatheIn {
   from {
     transform: scale(0.8);
@@ -93,8 +104,82 @@
   }
 }
 
+/* Ellipse breathing animations - tied to emotional state */
+@keyframes breatheCalm {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+}
+
+@keyframes breatheNeutral {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+@keyframes breatheIntense {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes breatheOverwhelmed {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  25% {
+    transform: scale(1.06);
+    opacity: 0.95;
+  }
+  75% {
+    transform: scale(1.06);
+    opacity: 0.95;
+  }
+}
+
+/* Ellipse breathing classes */
+.ellipse-breathe-calm {
+  animation: breatheCalm 4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.ellipse-breathe-neutral {
+  animation: breatheNeutral 2.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.ellipse-breathe-intense {
+  animation: breatheIntense 1.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.ellipse-breathe-overwhelmed {
+  animation: breatheOverwhelmed 1s ease-in-out infinite;
+  transform-origin: center;
+}
+
 .animate-slideUp {
   animation: slideUp 0.5s ease-out;
+}
+
+.animate-slideIn {
+  animation: fadeSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .animate-bounce {

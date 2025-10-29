@@ -29,8 +29,8 @@ const tutorialSteps = [
   {
     title: "How to Use This Tool",
     icon: Palette,
-    content: "Drag the colored dots or the ellipses themselves to adjust. Try to match your current feeling. Then save it with a note about what you're experiencing.",
-    example: "You can use this to: track anxiety patterns, understand your focus levels, or share with friends to compare how you perceive the same situation differently."
+    content: "Drag the ellipses to adjust and match your current feeling. Use single-finger drag for diagonal control, or two-finger multi-touch for precise independent axis control.",
+    example: "💡 Multi-touch tip: Use two fingers to independently control horizontal and vertical axes for nuanced emotional expression. This allows you to precisely map 'unterdrückt' (suppressed) feelings or external pressure."
   }
 ];
 
