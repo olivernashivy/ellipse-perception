@@ -23,6 +23,7 @@ const EllipsePerceptionApp = () => {
   const [currentEmotion, setCurrentEmotion] = useState('');
   const [currentNotes, setCurrentNotes] = useState('');
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [showInstructions, setShowInstructions] = useState(false);
   
   // Canvas references
   const svgRef = useRef(null);
@@ -130,6 +131,35 @@ const EllipsePerceptionApp = () => {
     return '#ffd93d';
   };
 
+  // Emotional state interpretation helpers
+  const getTopDownInterpretation = () => {
+    const ratio = topDownMajor / topDownMinor;
+    if (topDownMajor > 280 && ratio > 2.5) {
+      return "Overwhelmed - Taking on too much responsibility";
+    } else if (topDownMajor > 220 && ratio > 2) {
+      return "Stretched thin - High mental burden";
+    } else if (topDownMajor < 120) {
+      return "Relaxed control - Low pressure";
+    } else if (ratio < 1.5) {
+      return "Flexible mindset - Adaptive thinking";
+    }
+    return "Balanced mental state";
+  };
+
+  const getBottomUpInterpretation = () => {
+    const ratio = bottomUpMajor / bottomUpMinor;
+    if (bottomUpMajor > 280 && ratio > 2.5) {
+      return "Loss of self - External pressure overwhelming";
+    } else if (bottomUpMajor > 220 && ratio > 2) {
+      return "Scattered attention - Too much input";
+    } else if (bottomUpMinor > 180) {
+      return "Grounded - Strong sense of self";
+    } else if (bottomUpMinor < 80) {
+      return "Hyper-focused - Narrow perception";
+    }
+    return "Balanced awareness";
+  };
+
   // Handlers
   const handlePointerDown = (e, ellipse) => {
     e.preventDefault();
@@ -149,25 +179,28 @@ const EllipsePerceptionApp = () => {
     const dy = Math.abs(y - centerY);
 
     if (isDragging === 'bottomUp') {
+      // Bottom-Up: Horizontal ellipse - independent control
+      // Major axis (horizontal) = movement/overview - stretching sideways shows loss of self, external pressure
+      // Minor axis (vertical) = focus - how thin/wide the perception band is
       const newMajor = Math.max(50, Math.min(350, dx));
       const newMinor = Math.max(50, Math.min(250, dy));
       setBottomUpMajor(newMajor);
       setBottomUpMinor(newMinor);
       
-      const coupling = 350 - (newMajor - 50);
-      setTopDownMajor(Math.max(50, Math.min(350, coupling)));
-      const ratio = newMinor / 100;
-      setTopDownMinor(Math.max(50, Math.min(250, 100 / ratio)));
+      // Provide visual feedback for emotional state
+      triggerHaptic();
+      
     } else if (isDragging === 'topDown') {
+      // Top-Down: Vertical ellipse - independent control
+      // Major axis (vertical) = burden/responsibility - stretching up shows being overwhelmed, taking on too much
+      // Minor axis (horizontal) = flexibility - how rigid/flexible the mental state is
       const newMajor = Math.max(50, Math.min(350, dy));
       const newMinor = Math.max(50, Math.min(250, dx));
       setTopDownMajor(newMajor);
       setTopDownMinor(newMinor);
       
-      const coupling = 350 - (newMajor - 50);
-      setBottomUpMajor(Math.max(50, Math.min(350, coupling)));
-      const ratio = newMinor / 100;
-      setBottomUpMinor(Math.max(50, Math.min(250, 100 / ratio)));
+      // Provide visual feedback for emotional state
+      triggerHaptic();
     }
   };
 
@@ -352,6 +385,16 @@ Explore your own perception at: ${window.location.href}`;
           </div>
         </div>
 
+        {/* Empathetic instruction panel */}
+        {/* <div className="mb-4 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
+          <div className="text-xs text-blue-300 space-y-1">
+            <div className="font-semibold mb-1">💡 How to express your feeling:</div>
+            <div>🟡 <span className="text-yellow-300">Horizontal (Yellow)</span>: Stretch sideways when you feel external pressure, loss of self, or scattered</div>
+            <div>🟢 <span className="text-green-300">Vertical (Green)</span>: Stretch upward when overwhelmed, taking on too much responsibility</div>
+            <div className="text-white/60 text-[10px] mt-2">Drag each ellipse independently to map your unique emotional state</div>
+          </div>
+        </div> */}
+
         {currentEmotion && (
           <div className="mb-4 bg-gradient-to-r from-pink-600/20 to-purple-600/20 border border-pink-500/30 rounded-xl p-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -385,11 +428,30 @@ Explore your own perception at: ${window.location.href}`;
           getGradientColor={getGradientColor}
         />
 
-        <div className="h-10 bg-gradient-to-r from-red-500 via-yellow-400 to-green-500 rounded-full relative mb-6 shadow-lg">
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-4 h-14 bg-white rounded-full shadow-2xl transition-all duration-300"
-            style={{ left: `${Math.max(0, Math.min(100, 50 + (balance - 1) * 25))}%`, filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' }}
-          />
+        {/* Balance slider with hover instructions */}
+        <div 
+          className="relative mb-6"
+          onMouseEnter={() => setShowInstructions(true)}
+          onMouseLeave={() => setShowInstructions(false)}
+        >
+          {/* Empathetic instruction panel - shows on hover */}
+          {showInstructions && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 bg-blue-500/20 backdrop-blur-md border border-blue-500/50 rounded-xl p-3 shadow-2xl animate-slideUp max-w-md">
+              <div className="text-xs text-blue-200 space-y-1">
+                <div className="font-semibold mb-1 text-white">💡 How to express your feeling:</div>
+                <div>🟡 <span className="text-yellow-300 font-medium">Horizontal (Yellow)</span>: Stretch sideways when you feel external pressure, loss of self, or scattered</div>
+                <div>🟢 <span className="text-green-300 font-medium">Vertical (Green)</span>: Stretch upward when overwhelmed, taking on too much responsibility</div>
+                <div className="text-white/70 text-[10px] mt-2 pt-2 border-t border-white/20">Drag each ellipse independently to map your unique emotional state</div>
+              </div>
+            </div>
+          )}
+
+          <div className="h-10 bg-gradient-to-r from-red-500 via-yellow-400 to-green-500 rounded-full relative shadow-lg">
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-14 bg-white rounded-full shadow-2xl transition-all duration-300"
+              style={{ left: `${Math.max(0, Math.min(100, 50 + (balance - 1) * 25))}%`, filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.5))' }}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-6">
@@ -400,7 +462,10 @@ Explore your own perception at: ${window.location.href}`;
             </div>
             <div className="text-sm space-y-1">
               <div>Eccentricity: <span className="font-bold">{eccBU.toFixed(3)}</span></div>
-              <div className="text-xs text-white/50">Stimulus-driven</div>
+              <div className="text-xs text-white/50 mb-2">Sensory awareness</div>
+              <div className="text-xs text-yellow-300 mt-2 italic">
+                {getBottomUpInterpretation()}
+              </div>
             </div>
           </div>
           <div className="bg-gradient-to-br from-green-500/20 to-cyan-500/20 rounded-xl p-4 border border-green-500/30">
@@ -410,7 +475,10 @@ Explore your own perception at: ${window.location.href}`;
             </div>
             <div className="text-sm space-y-1">
               <div>Eccentricity: <span className="font-bold">{eccTD.toFixed(3)}</span></div>
-              <div className="text-xs text-white/50">Concept-driven</div>
+              <div className="text-xs text-white/50 mb-2">Mental burden</div>
+              <div className="text-xs text-green-300 mt-2 italic">
+                {getTopDownInterpretation()}
+              </div>
             </div>
           </div>
         </div>
