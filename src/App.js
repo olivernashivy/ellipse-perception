@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, RotateCcw, Database, HelpCircle, Share2, Tag, BookOpen, Users, X, Brain, Smile, Frown, Target, Zap, Heart, Eye, BarChart3, Lightbulb, Triangle, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Save, RotateCcw, Database, HelpCircle, Share2, Tag, BookOpen, Users, X, Brain, Smile, Frown, Target, Zap, Heart, Eye, Lightbulb, Triangle, AlertTriangle, CheckCircle } from 'lucide-react';
 import Tutorial from './components/Tutorial';
 import SaveDialog from './components/SaveDialog';
 import EllipseCanvas from './components/EllipseCanvas';
